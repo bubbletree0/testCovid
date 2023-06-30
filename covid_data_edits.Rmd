@@ -1,0 +1,92 @@
+---
+title: "covid_data_edits"
+author: "Jecy Yu"
+date: "17/05/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+```{r Read Files}
+folder<-'C:/Users/jecyy/OneDrive - York University/Covid/'
+ori_folder<- 'C:/Users/jecyy/OneDrive - York University/Covid/Original_Data/'
+populations <- read_csv(paste0(ori_folder, 'WPP2022_Population1JanuaryByAge5GroupSex_Medium.csv'))
+vaccines <- read_csv(paste0(ori_folder, 'vaccinations.csv'))
+vac_manufacture <- read_csv(paste0(ori_folder, 'vaccinations-by-manufacturer.csv'))
+vac_efficacy <-  readxl::read_excel(paste0(folder, 'vaccine_efficacy.xlsx'),range =cellranger::cell_cols("A:D"))
+
+```
+
+
+```{r Vaccines edits}
+
+
+
+vac <- vaccines%>% transmute(location, iso_code, date,
+                             total_individuals_at_least_one=people_vaccinated,
+                             total_individuals_fully_vacinated=people_fully_vaccinated,
+                             total_individuals_3doses=total_boosters)
+
+
+#data manipulation in order to get the vaccine manufacturer per country
+
+
+all_date <- 18601:19512
+
+manufacture_t<- vac_manufacture %>% mutate(datem = paste0('tot_',unclass(date)))%>%select(-date)%>%
+  pivot_wider(names_from = datem, values_from = total_vaccinations)
+
+
+
+manufacture_t$tot_18600<- ifelse(is.na(manufacture_t$tot_18600)==T, 0, manufacture_t$tot_18600)
+
+for (i in all_date){
+  if(is.null(manufacture_t[[paste0('tot_', i)]])==T){
+    manufacture_t[[paste0('tot_', i)]]<- NA
+  }
+  manufacture_t[[paste0('tot_', i)]]<- ifelse(is.na(manufacture_t[[paste0('tot_', i)]])==T, manufacture_t[[paste0('tot_', i-1)]],manufacture_t[[paste0('tot_', i)]])
+  
+  
+}
+manufacture_t<- manufacture_t %>% relocate(sort(names(.)))%>% relocate(location, vaccine)
+
+manufacture_t<- manufacture_t%>%
+  mutate(across(tot_18601:tot_19512, ~ .x-get(paste0('tot_',as.character(as.numeric(substring(cur_column(), 5))-1))), .names = 'new.{.col}'))%>%
+  mutate(new.tot_18600=tot_18600)
+
+manufacture_t<- manufacture_t%>% pivot_longer(!c(location,vaccine), names_sep = "_", names_to = c('type','date'), values_to='count')%>%
+  pivot_wider(id_cols = c('location', 'date','vaccine'), names_from = type, values_from = count) %>%
+  mutate(date=as.Date(as.numeric(date), origin="1970-01-01")) %>% rename(TotalVaccineCount='tot', DailyNewVaccineCount='new.tot')%>%
+  arrange(location, date)
+
+#The full dataset of all countries, their vaccine count by type and the corresponding efficacy of each vaccine
+
+vac_full <- left_join(vac, manufacture_t,by=c('location', 'date')) %>% 
+  left_join(., vac_efficacy,by=c('vaccine'))
+
+```
+
+
+```{r pop edits}
+pop <- populations %>% transmute( iso_code=ISO3_code, LocID, LocTypeID,
+                                  LocTypeName, Year=Time, Location, StartRange=AgeGrpStart, EndRange=AgeGrpStart+4,PopTotal=PopTotal*1000)
+
+
+
+```
+
+
+```{r waste code}
+
+
+write_csv(pop,paste0(folder, 'Population.csv'))
+
+write_csv(manufacture_t,paste0(folder, 'vaccine_manufacture.csv'))
+write_csv(vac,paste0(folder, 'vaccine_count.csv'))
+write_csv(vac_full,paste0(folder, 'vaccine_full.csv'))
+
+```
