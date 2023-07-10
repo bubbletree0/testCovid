@@ -119,12 +119,6 @@ pop <- populations %>% transmute( iso_code=ISO3_code, LocID, LocTypeID,
 
 ```
 
-```{interpolating data gaps}
-
-
-```
-
-
 ```{r write csv code}
 
 
