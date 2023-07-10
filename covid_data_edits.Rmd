@@ -8,6 +8,8 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(zoo)
+library(Hmisc)
 ```
 
 
@@ -27,13 +29,51 @@ vac_efficacy <-  readxl::read_excel(paste0(folder, 'vaccine_efficacy.xlsx'),rang
 
 
 vac <- vaccines%>% transmute(location, iso_code, date,
-                             total_individuals_at_least_one=people_vaccinated,
-                             total_individuals_fully_vacinated=people_fully_vaccinated,
+                             total_individuals_at_least_one=people_vaccinated,                             total_individuals_fully_vacinated=people_fully_vaccinated,
                              total_individuals_3doses=total_boosters)
+# in order to fill some of the missing data, we get the average proportion of fully vaccinated to at least one vaccination
+total_vac_prop <- mean((vac$total_individuals_at_least_one-vac$total_individuals_fully_vacinated)/vac$total_individuals_at_least_one, na.rm=T )
+
+vac<- vac %>% group_by(location) %>%
+  mutate(total_individuals_fully_vacinated=if(sum(is.na(total_individuals_fully_vacinated))==n()) 
+                                                  round(total_individuals_at_least_one*total_vac_prop)
+                                                  else total_individuals_fully_vacinated) %>% ungroup()
+
+booster_prop <- mean((vac$total_individuals_at_least_one-vac$total_individuals_3doses)/vac$total_individuals_at_least_one, na.rm=T )
+
+vac<- vac %>% group_by(location) %>%
+  mutate(total_individuals_3doses=if(sum(is.na(total_individuals_3doses))==n()) 
+                                                  round(total_individuals_at_least_one*booster_prop)
+                                                  else total_individuals_3doses) %>% ungroup()
+ 
+ 
+ 
+vac <- vac %>% group_by(location)%>%
+  mutate(total_individuals_at_least_one=
+           ifelse(is.na(total_individuals_at_least_one)==T&row_number()==1, 0, total_individuals_at_least_one),
+         total_individuals_fully_vacinated=
+           ifelse(is.na(total_individuals_fully_vacinated)==T&row_number()==1, 0, total_individuals_fully_vacinated),
+         total_individuals_3doses=
+           ifelse(is.na(total_individuals_3doses)==T&row_number()==1, 0, total_individuals_3doses)) %>% ungroup()
+
+#interpolating data between data points so model runs
+
+vac<-vac %>% group_by(location)%>%
+  mutate(total_individuals_at_least_one=c(round(na.approx(total_individuals_at_least_one)),rep(NA,n()-max(which(!is.na(total_individuals_at_least_one))))),
+         total_individuals_fully_vacinated=c(round(na.approx(total_individuals_fully_vacinated)),rep(NA,n()-max(which(!is.na(total_individuals_fully_vacinated))))),
+         total_individuals_3doses=c(round(na.approx(total_individuals_3doses)),rep(NA,n()-max(which(!is.na(total_individuals_3doses))))))%>% ungroup()
+
+
+#extrapolating any data beyond the last real data point
+                                          
+
+vac %>% group_by(location)%>%
+  mutate(total_individuals_at_least_one=ifelse(is.na(tail(total_individuals_at_least_one,n=1))==T,round(Hmisc::approxExtrap(date[!is.na(total_individuals_at_least_one)],total_individuals_at_least_one[!is.na(total_individuals_at_least_one)],xout=as.numeric(date))$x),total_individuals_at_least_one),
+        total_individuals_fully_vacinated=ifelse(is.na(tail(total_individuals_fully_vacinated,n=1))==T,round(Hmisc::approxExtrap(date[!is.na(total_individuals_fully_vacinated)],total_individuals_fully_vacinated[!is.na(total_individuals_fully_vacinated)],xout=as.numeric(date))$x),total_individuals_fully_vacinated),
+         total_individuals_3doses=ifelse(is.na(tail(total_individuals_3doses,n=1))==T,round(Hmisc::approxExtrap(date[!is.na(total_individuals_3doses)],total_individuals_3doses[!is.na(total_individuals_3doses)],xout=as.numeric(date))$x),total_individuals_3doses))
 
 
 #data manipulation in order to get the vaccine manufacturer per country
-
 
 all_date <- 18601:19512
 
@@ -79,8 +119,13 @@ pop <- populations %>% transmute( iso_code=ISO3_code, LocID, LocTypeID,
 
 ```
 
+```{interpolating data gaps}
 
-```{r waste code}
+
+```
+
+
+```{r write csv code}
 
 
 write_csv(pop,paste0(folder, 'Population.csv'))
