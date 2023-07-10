@@ -4,11 +4,15 @@ This is a description of vaccine and population dataset. This is in no way a com
 
 vac_full.csv
 
+Some of the data here are interpolated and extrapolated since the data points can be sparse (depending on the region). Linear interpolation/extrapolation is used. If columns 'total_individuals_fully_vacinated' and 'total_individuals_3doses' are completely missing for a region, they are approximated using 'total_individuals_at_least_one' multiplied by the average proportion between 'total_individuals_fully_vacinated'/'total_individuals_3doses' and 'total_individuals_at_least_one'. 
+
+e.g.  'total_individuals_fully_vacinated'= 'total_individuals_at_least_one'*('total_individuals_at_least_one'-'total_individuals_fully_vacinated'/'total_individuals_at_least_one')
+
 Columns:
 	location - the full name of the country/region
 	iso_code - three letter code of each country/region (good for future linkage if needed)
 	date - the date of the data (year-month-day)
-	total_individuals_at_least_one - the total number of individual persons that recieved at least 	dose of any vaccine
+	total_individuals_at_least_one - the total number of individual persons that recieved at least 1 dose of any vaccine
 	total_individuals_fully_vacinated - the total number of individual persons that recieved the number of doses recommended by each of the vaccinated manufacturer 
 	total_individuals_3doses - the total number of individual persons that received an booster shot (i.e. extra dose above the number of recommended dosage)
 	vaccine - type of vaccine manufacturer
